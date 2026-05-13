@@ -116,9 +116,11 @@ On the fork:
 
 This repo has no CI yet; see issue #32 (the matrix is planned but separate from the fork's `linux-build.yml`).
 
-## PR cadence
+## Push cadence
 
-- One issue, one PR. Branch off the right base (`linux` on the fork; `main` on this repo). Squash-merge with the issue number in the PR title so the merged commit reads cleanly.
+- **Push directly. No PRs.** Solo-dev policy for now: commits land straight on `linux` on the fork and on `main` here. The fork's `linux-build.yml` still runs on push, so CI signal is preserved without the PR ceremony. Don't open PRs unless explicitly asked.
+- One issue, one commit (or one logical commit). Put `(#N)` in the subject line so the log threads back to the tracker issue — see existing history like `b7b12c3 core: enable local git remote inference on Linux (#38)` and `ac5520b docs/adr: tray strategy = libayatana-appindicator3 (#9)`.
+- Close the tracker issue manually after pushing, because GitHub's auto-close on cross-repo `Closes` doesn't fire from non-default branches: `gh issue close N -R pmatos/repobar.linux --reason completed --comment "Landed on \`<branch>\` as commit <sha>."`
 - TDD where possible. Write a failing test first, then the impl. The existing test suites are good models — Swift Testing on the fork, bash test driver for shell scripts (`Scripts/upstream-sync.test.sh`, `Scripts/verify-toolchain.sh`).
 - Always verify nothing else regressed: `swift test` after a change, not just the targeted filter.
 
