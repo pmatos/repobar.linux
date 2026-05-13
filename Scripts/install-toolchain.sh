@@ -25,12 +25,17 @@ SWIFT_RELEASE="swift-${SWIFT_VERSION}-RELEASE"
 INSTALL_PREFIX="${SWIFT_INSTALL_PREFIX:-$HOME/.swift/${SWIFT_RELEASE}}"
 
 MODE="install"
+SKIP_DEPS=0
 case "${1:-}" in
     --print-env) MODE="print-env" ;;
     --check)     MODE="check" ;;
+    --skip-deps) SKIP_DEPS=1 ;;
     "")          ;;
     *)           printf 'install-toolchain: unknown arg %q\n' "$1" >&2; exit 2 ;;
 esac
+# Allow env override too (useful for CI / non-root machines where deps are
+# pre-installed and we don't want the script to invoke a package manager).
+[ "${SWIFT_INSTALL_SKIP_DEPS:-0}" = "1" ] && SKIP_DEPS=1
 
 log() { printf '[install-toolchain] %s\n' "$*" >&2; }
 
@@ -180,10 +185,14 @@ main() {
         return
     fi
 
-    case "$id" in
-        ubuntu) install_deps_ubuntu "$version" ;;
-        arch)   install_deps_arch ;;
-    esac
+    if [ "$SKIP_DEPS" = "0" ]; then
+        case "$id" in
+            ubuntu) install_deps_ubuntu "$version" ;;
+            arch)   install_deps_arch ;;
+        esac
+    else
+        log "SKIP_DEPS=1; skipping package-manager step"
+    fi
 
     install_tarball "$url"
 
