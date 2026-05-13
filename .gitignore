@@ -1,0 +1,27 @@
+# SwiftPM
+.build/
+.swiftpm/
+
+# Xcode (unused on Linux but checked-out trees may produce these)
+*.xcodeproj/
+*.xcworkspace/
+
+# Build / packaging artifacts
+build/
+dist/
+*.deb
+*.rpm
+*.pkg.tar.zst
+*.AppImage
+
+# Editor / OS junk
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local Claude state
+.claude/worktrees/

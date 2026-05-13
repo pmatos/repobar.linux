@@ -1,0 +1,4 @@
+[submodule "repobar"]
+	path = repobar
+	url = git@github.com:pmatos/repobar.git
+	branch = linux
