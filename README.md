@@ -25,6 +25,10 @@ git clone --recurse-submodules git@github.com:pmatos/repobar.linux.git
 - GTK4 / Adwaita system-tray app with parity with the macOS menu bar UX.
 - Native packaging for Arch and Ubuntu LTS.
 
+## Toolchain
+
+Builds with Swift 6.2 on Arch and Ubuntu 22.04 / 24.04. See [docs/install-toolchain.md](docs/install-toolchain.md) for one-shot install and the verifier script that proves the install steps work against clean container images.
+
 ## Architecture, scope, and progress
 
 See the open issues for vertical-slice work items. Architecture and contributor docs land in `docs/` as part of issue [#34](https://github.com/pmatos/repobar.linux/issues/34).
