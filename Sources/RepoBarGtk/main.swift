@@ -64,6 +64,24 @@ func main() -> Int32 {
         return 1
     }
 
+    // libayatana-appindicator3 quirk: it will not export its StatusNotifierItem
+    // on D-Bus until a `GtkMenu` is attached, even if the menu is empty. The
+    // tracer is "icon only" by spec, so we attach a deliberately empty menu;
+    // the real menu lands in issue #13. Without this, the indicator silently
+    // fails to register with `org.kde.StatusNotifierWatcher` and no SNI host
+    // (Quickshell, Plasma, GNOME-AppIndicator-extension, …) renders the icon.
+    // `gtk_menu_new` returns a `GtkWidget *`; the indicator wants `GtkMenu *`.
+    // In C that's the `GTK_MENU()` cast macro. From Swift the equivalent is to
+    // rebind the opaque pointer to the menu type — safe because GtkMenu is a
+    // subclass of GtkWidget and gtk_menu_new always returns a GtkMenu instance.
+    guard let menuWidget = gtk_menu_new() else {
+        let message = "RepoBarGtk: gtk_menu_new returned NULL\n"
+        message.withCString { FileHandle.standardError.write(Data(bytes: $0, count: strlen($0))) }
+        return 1
+    }
+    let menu = UnsafeMutableRawPointer(menuWidget).assumingMemoryBound(to: GtkMenu.self)
+    app_indicator_set_menu(indicator, menu)
+
     app_indicator_set_status(indicator, APP_INDICATOR_STATUS_ACTIVE)
     app_indicator_set_title(indicator, "RepoBar")
 
