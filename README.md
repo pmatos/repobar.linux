@@ -29,6 +29,31 @@ git clone --recurse-submodules git@github.com:pmatos/repobar.linux.git
 
 Builds with Swift 6.2 on Arch and Ubuntu 22.04 / 24.04. See [docs/install-toolchain.md](docs/install-toolchain.md) for one-shot install and the verifier script that proves the install steps work against clean container images.
 
+## Build & run (tracer)
+
+System packages required at the moment (Arch names; equivalents documented in [`docs/adr/0001-tray-strategy.md`](docs/adr/0001-tray-strategy.md)):
+
+```
+libayatana-appindicator   # publishes the StatusNotifierItem on D-Bus
+gtk3                       # required at runtime by libayatana-appindicator3
+```
+
+From the repo root:
+
+```
+eval "$(Scripts/install-toolchain.sh --print-env)"
+swift build
+./.build/debug/RepoBarGtk      # Ctrl-C to quit
+```
+
+The tracer publishes a static tray icon and a GLib main loop. Any
+StatusNotifierItem host renders the icon — DankMaterialShell on Niri,
+KDE Plasma, XFCE's tray plugin, and waybar's tray module all work out
+of the box. **GNOME caveat**: vanilla GNOME has no SNI host. Install
+[AppIndicator and KStatusNotifierItem Support](https://extensions.gnome.org/extension/615/appindicator-support/)
+or you will not see the icon. See the ADR for the tradeoffs that led
+to libayatana-appindicator3.
+
 ## Architecture, scope, and progress
 
 See the open issues for vertical-slice work items. Architecture and contributor docs land in `docs/` as part of issue [#34](https://github.com/pmatos/repobar.linux/issues/34).
