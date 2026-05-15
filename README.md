@@ -54,6 +54,24 @@ of the box. **GNOME caveat**: vanilla GNOME has no SNI host. Install
 or you will not see the icon. See the ADR for the tradeoffs that led
 to libayatana-appindicator3.
 
+## Desktop integration
+
+`Scripts/install-desktop.sh` installs the `repobar.desktop` entry plus
+the hicolor icon set (16–512 px PNGs under `share/icons/hicolor/<size>/apps/`)
+into a configurable prefix. Distro packagers should pass `--destdir` and
+`--no-cache-update` so the package manager owns the post-install cache step.
+
+```
+sudo Scripts/install-desktop.sh --prefix /usr/local
+# or, for a packaging build:
+Scripts/install-desktop.sh --prefix /usr --destdir "$pkgdir" --no-cache-update
+```
+
+The icons are regenerated from the 1024×1024 master in the submodule
+(`repobar/Icon.icon/Assets/repobaricon.png`) via `Scripts/regenerate-icons.sh`.
+End-to-end install / uninstall / desktop-file-validate / icon-cache tests
+live in `Scripts/install-desktop.test.sh`.
+
 ## Architecture, scope, and progress
 
 See the open issues for vertical-slice work items. Architecture and contributor docs land in `docs/` as part of issue [#34](https://github.com/pmatos/repobar.linux/issues/34).

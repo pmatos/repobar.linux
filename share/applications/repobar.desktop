@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=RepoBar
+GenericName=GitHub Repository Tracker
+Comment=Surface GitHub repositories, issues, PRs, and CI in your system tray
+Exec=RepoBarGtk
+Icon=repobar
+Categories=Development;
+Keywords=git;github;repository;pull request;issue;ci;
+StartupNotify=true
+NoDisplay=true
