@@ -53,12 +53,14 @@ func main() -> Int32 {
         return 1
     }
 
-    // The icon name resolves against the active XDG icon theme. For the
-    // tracer we use a name that every standard theme carries; a custom
-    // hicolor icon ships with the .desktop file work in a later issue.
+    // The icon name resolves against the active XDG icon theme. The hicolor
+    // PNGs shipped by `Scripts/install-desktop.sh` (16–512 px) land under
+    // `share/icons/hicolor/<size>/apps/repobar.png`; if the assets are not
+    // installed, libayatana-appindicator3 falls back to the freedesktop
+    // missing-image placeholder rather than crashing.
     guard let indicator = app_indicator_new(
         "com.steipete.repobar.linux",
-        "applications-utilities",
+        "repobar",
         APP_INDICATOR_CATEGORY_APPLICATION_STATUS
     ) else {
         let message = "RepoBarGtk: failed to construct AppIndicator\n"
