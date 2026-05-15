@@ -58,6 +58,7 @@ test_install_under_temp_prefix() (
     for size in "${SIZES[@]}"; do
         assert_file "$prefix/share/icons/hicolor/${size}x${size}/apps/repobar.png" install || exit 1
     done
+    assert_file "$prefix/share/systemd/user/repobar.service" install || exit 1
 )
 
 test_destdir_separates_stage_from_runtime_prefix() (
@@ -101,6 +102,65 @@ test_gtk_update_icon_cache_succeeds_on_install_tree() (
     [[ -f "$prefix/share/icons/hicolor/icon-theme.cache" ]] || exit 1
 )
 
+test_systemd_unit_substitutes_bindir() (
+    prefix="$(mktemp -d -t install-desktop-systemd-sub.XXXXXX)"
+    trap 'rm -rf "$prefix"' EXIT
+
+    "$SCRIPT" --prefix "$prefix" --no-cache-update --quiet
+    unit="$prefix/share/systemd/user/repobar.service"
+
+    assert_file "$unit" systemd-unit || exit 1
+    # No @BINDIR@ placeholder should survive the install.
+    if grep -q '@BINDIR@' "$unit"; then
+        note "  FAIL: unit still contains @BINDIR@ placeholder"
+        exit 1
+    fi
+    # ExecStart should reference the default BINDIR (=PREFIX/bin).
+    grep -qE "^ExecStart=${prefix}/bin/RepoBarGtk\$" "$unit" || {
+        note "  FAIL: ExecStart not substituted to $prefix/bin/RepoBarGtk"
+        grep ExecStart "$unit"
+        exit 1
+    }
+    # Restart policy + hardening fields must be present.
+    grep -qE '^Restart=on-failure$' "$unit" || { note "  FAIL: missing Restart=on-failure"; exit 1; }
+    grep -qE '^WantedBy=graphical-session\.target$' "$unit" || { note "  FAIL: missing WantedBy=graphical-session.target"; exit 1; }
+)
+
+test_systemd_unit_custom_bindir() (
+    prefix="$(mktemp -d -t install-desktop-systemd-bindir.XXXXXX)"
+    trap 'rm -rf "$prefix"' EXIT
+
+    "$SCRIPT" --prefix "$prefix" --bindir "/opt/repobar/bin" --no-cache-update --quiet
+    unit="$prefix/share/systemd/user/repobar.service"
+
+    grep -qE '^ExecStart=/opt/repobar/bin/RepoBarGtk$' "$unit" || {
+        note "  FAIL: --bindir didn't make it into ExecStart"
+        grep ExecStart "$unit"
+        exit 1
+    }
+)
+
+test_systemd_unit_passes_analyze_verify() (
+    prefix="$(mktemp -d -t install-desktop-systemd-verify.XXXXXX)"
+    trap 'rm -rf "$prefix"' EXIT
+
+    # systemd-analyze verify checks that ExecStart points at an executable
+    # that exists. Stage a no-op stub so verify can resolve the path.
+    mkdir -p "$prefix/bin"
+    cat > "$prefix/bin/RepoBarGtk" <<'STUB'
+#!/bin/sh
+exec sleep infinity
+STUB
+    chmod +x "$prefix/bin/RepoBarGtk"
+
+    "$SCRIPT" --prefix "$prefix" --no-cache-update --quiet
+    unit="$prefix/share/systemd/user/repobar.service"
+
+    # --user so the verify uses user-manager defaults (graphical-session.target
+    # is a user-manager target, not a system one).
+    systemd-analyze verify --user "$unit" 2>&1
+)
+
 test_uninstall_removes_all_files() (
     prefix="$(mktemp -d -t install-desktop-uninstall.XXXXXX)"
     trap 'rm -rf "$prefix"' EXIT
@@ -112,15 +172,19 @@ test_uninstall_removes_all_files() (
     for size in "${SIZES[@]}"; do
         assert_missing "$prefix/share/icons/hicolor/${size}x${size}/apps/repobar.png" uninstall || exit 1
     done
+    assert_missing "$prefix/share/systemd/user/repobar.service" uninstall || exit 1
 )
 
 # -----------------------------------------------------------------------------
 
-run_test "install lands all 9 files under prefix" test_install_under_temp_prefix
+run_test "install lands all 10 files under prefix" test_install_under_temp_prefix
 run_test "--destdir staging keeps runtime prefix in the path" test_destdir_separates_stage_from_runtime_prefix
 run_test "installed .desktop passes desktop-file-validate" test_desktop_file_passes_validate
 run_test "update-desktop-database succeeds on the install tree" test_update_desktop_database_succeeds_on_install_tree
 run_test "gtk-update-icon-cache succeeds on the install tree" test_gtk_update_icon_cache_succeeds_on_install_tree
+run_test "systemd unit substitutes default BINDIR=PREFIX/bin" test_systemd_unit_substitutes_bindir
+run_test "systemd unit honors --bindir override" test_systemd_unit_custom_bindir
+run_test "systemd unit passes systemd-analyze verify" test_systemd_unit_passes_analyze_verify
 run_test "--uninstall removes everything it installed" test_uninstall_removes_all_files
 
 note ""

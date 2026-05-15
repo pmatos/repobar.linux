@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Install (or uninstall) RepoBar's Linux desktop integration: the .desktop
-# entry and the hicolor icon set.
+# entry, the hicolor icon set, and the systemd user service unit.
 #
 # Usage:
 #   Scripts/install-desktop.sh [--prefix PREFIX] [--destdir DESTDIR]
+#                              [--bindir BINDIR]
 #                              [--uninstall] [--no-cache-update] [--quiet]
 #
 #   --prefix PREFIX         Install under PREFIX/share/... (default /usr/local).
@@ -11,6 +12,9 @@
 #   --destdir DESTDIR       Stage files under DESTDIR + PREFIX rather than
 #                           writing to PREFIX directly. Useful for PKGBUILD,
 #                           debian/rules, fakeroot, etc.
+#   --bindir BINDIR         Where the RepoBarGtk binary will live at runtime.
+#                           Substituted into the systemd unit's ExecStart=.
+#                           Default: PREFIX/bin.
 #   --uninstall             Remove the files this script would have installed.
 #   --no-cache-update       Skip update-desktop-database and gtk-update-icon-cache
 #                           after the install. Packagers always want this
@@ -20,12 +24,14 @@
 # Files placed (or removed):
 #   PREFIX/share/applications/repobar.desktop
 #   PREFIX/share/icons/hicolor/<size>x<size>/apps/repobar.png  (for 16..512)
+#   PREFIX/share/systemd/user/repobar.service
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PREFIX="/usr/local"
 DESTDIR=""
+BINDIR=""
 ACTION="install"
 RUN_CACHE=1
 QUIET=0
@@ -41,6 +47,10 @@ while [[ $# -gt 0 ]]; do
             DESTDIR="$2"; shift 2 ;;
         --destdir=*)
             DESTDIR="${1#--destdir=}"; shift ;;
+        --bindir)
+            BINDIR="$2"; shift 2 ;;
+        --bindir=*)
+            BINDIR="${1#--bindir=}"; shift ;;
         --uninstall)
             ACTION="uninstall"; shift ;;
         --no-cache-update)
@@ -58,6 +68,10 @@ done
 # files will live at after the package is installed. update-{desktop,icon}
 # operate on the staging tree when DESTDIR is set.
 STAGE="${DESTDIR}${PREFIX}"
+# BINDIR defaults to PREFIX/bin and is substituted at runtime — it must be the
+# *runtime* path, not the staged path, because that's where the binary will
+# live when systemd reads the unit.
+: "${BINDIR:=${PREFIX}/bin}"
 say() { [[ $QUIET -eq 1 ]] || echo "$1"; }
 
 install_one() {
@@ -65,6 +79,18 @@ install_one() {
     mkdir -p "$(dirname "$dst")"
     install -m 0644 "$src" "$dst"
     say "  install $dst"
+}
+
+install_systemd_unit() {
+    local src="$REPO_ROOT/share/systemd/user/repobar.service.in"
+    local dst="$STAGE/share/systemd/user/repobar.service"
+    mkdir -p "$(dirname "$dst")"
+    # Substitute @BINDIR@ → BINDIR. Using a sentinel that cannot appear in
+    # legitimate paths means we don't have to escape sed metacharacters on the
+    # replacement side. We use # as the delimiter so paths with / pass through.
+    sed "s#@BINDIR@#${BINDIR}#g" "$src" > "$dst"
+    chmod 0644 "$dst"
+    say "  install $dst (BINDIR=$BINDIR)"
 }
 
 remove_one() {
@@ -83,6 +109,7 @@ if [[ "$ACTION" == "install" ]]; then
         install_one "$REPO_ROOT/share/icons/hicolor/${size}x${size}/apps/repobar.png" \
                     "$STAGE/share/icons/hicolor/${size}x${size}/apps/repobar.png"
     done
+    install_systemd_unit
 
     if [[ $RUN_CACHE -eq 1 ]]; then
         if command -v update-desktop-database >/dev/null 2>&1; then
@@ -101,7 +128,9 @@ else
     for size in "${SIZES[@]}"; do
         remove_one "$STAGE/share/icons/hicolor/${size}x${size}/apps/repobar.png"
     done
-    # Best-effort: drop now-empty hicolor/<size>/apps and hicolor/<size> dirs.
+    remove_one "$STAGE/share/systemd/user/repobar.service"
+    # Best-effort: drop now-empty hicolor/<size>/apps, hicolor/<size>, and
+    # systemd/user dirs.
     for size in "${SIZES[@]}"; do
         rmdir --ignore-fail-on-non-empty "$STAGE/share/icons/hicolor/${size}x${size}/apps" 2>/dev/null || true
         rmdir --ignore-fail-on-non-empty "$STAGE/share/icons/hicolor/${size}x${size}" 2>/dev/null || true
@@ -109,6 +138,8 @@ else
     rmdir --ignore-fail-on-non-empty "$STAGE/share/icons/hicolor" 2>/dev/null || true
     rmdir --ignore-fail-on-non-empty "$STAGE/share/icons" 2>/dev/null || true
     rmdir --ignore-fail-on-non-empty "$STAGE/share/applications" 2>/dev/null || true
+    rmdir --ignore-fail-on-non-empty "$STAGE/share/systemd/user" 2>/dev/null || true
+    rmdir --ignore-fail-on-non-empty "$STAGE/share/systemd" 2>/dev/null || true
     if [[ $RUN_CACHE -eq 1 ]]; then
         if command -v update-desktop-database >/dev/null 2>&1 && [[ -d "$STAGE/share/applications" ]]; then
             update-desktop-database -q "$STAGE/share/applications" || true

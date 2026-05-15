@@ -56,8 +56,9 @@ to libayatana-appindicator3.
 
 ## Desktop integration
 
-`Scripts/install-desktop.sh` installs the `repobar.desktop` entry plus
-the hicolor icon set (16–512 px PNGs under `share/icons/hicolor/<size>/apps/`)
+`Scripts/install-desktop.sh` installs the `repobar.desktop` entry, the
+hicolor icon set (16–512 px PNGs under `share/icons/hicolor/<size>/apps/`),
+and the systemd user service unit (`share/systemd/user/repobar.service`)
 into a configurable prefix. Distro packagers should pass `--destdir` and
 `--no-cache-update` so the package manager owns the post-install cache step.
 
@@ -67,10 +68,32 @@ sudo Scripts/install-desktop.sh --prefix /usr/local
 Scripts/install-desktop.sh --prefix /usr --destdir "$pkgdir" --no-cache-update
 ```
 
+The unit's `ExecStart=` is substituted with `<prefix>/bin/RepoBarGtk` at
+install time. Override the binary location with `--bindir /opt/foo/bin` if
+your packaging puts the binary somewhere else.
+
 The icons are regenerated from the 1024×1024 master in the submodule
 (`repobar/Icon.icon/Assets/repobaricon.png`) via `Scripts/regenerate-icons.sh`.
-End-to-end install / uninstall / desktop-file-validate / icon-cache tests
-live in `Scripts/install-desktop.test.sh`.
+End-to-end install / uninstall / desktop-file-validate / icon-cache /
+systemd-analyze tests live in `Scripts/install-desktop.test.sh`.
+
+### Auto-start on login
+
+Once the unit is installed and the `RepoBarGtk` binary is on the path that
+`ExecStart=` points at, enable it as a per-user service:
+
+```
+systemctl --user daemon-reload
+systemctl --user enable --now repobar.service
+# Tail logs:
+journalctl --user -u repobar.service -f
+# Stop and disable:
+systemctl --user disable --now repobar.service
+```
+
+The unit is wired to `graphical-session.target` (so it stops on logout and
+won't start in a TTY-only session) and restarts on failure with a 5 s delay,
+giving up after 3 failures in 60 s.
 
 ## Architecture, scope, and progress
 

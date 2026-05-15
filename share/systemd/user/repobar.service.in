@@ -1,0 +1,17 @@
+[Unit]
+Description=RepoBar tray (GitHub repositories, issues, PRs, CI)
+Documentation=https://github.com/pmatos/repobar.linux
+PartOf=graphical-session.target
+After=graphical-session.target
+StartLimitIntervalSec=60s
+StartLimitBurst=3
+
+[Service]
+Type=simple
+ExecStart=@BINDIR@/RepoBarGtk
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=10s
+
+[Install]
+WantedBy=graphical-session.target
