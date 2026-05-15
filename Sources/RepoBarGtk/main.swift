@@ -9,11 +9,13 @@ import Foundation
 
 // MARK: - SIGINT / SIGTERM handling
 
-// The GLib main loop runs on the main thread. POSIX signal handlers cannot
-// touch GObject state from inside the handler, so we just flip a `sig_atomic_t`
-// flag and have a `g_timeout_add` source poll it. Crude, but cheap, and avoids
-// needing glib-unix.h.
-private nonisolated(unsafe) var shouldQuit: sig_atomic_t = 0
+// The GLib main loop runs on the main thread. POSIX signal handlers and
+// GObject signal trampolines (see `MenuBuilder.swift`'s `activateQuit`) both
+// flip a shared `sig_atomic_t` flag; a `g_timeout_add` source polls it and
+// tears the loop down on the next tick. Crude, but cheap, and avoids needing
+// `g_unix_signal_add` (which would pull in glib-unix.h) or a separate exit
+// path for "user clicked Quit" vs "user hit Ctrl-C".
+nonisolated(unsafe) var shouldQuit: sig_atomic_t = 0
 private nonisolated(unsafe) var activeLoop: OpaquePointer?
 
 @_cdecl("repobar_signal_handler")
@@ -64,16 +66,10 @@ func main() -> Int32 {
         return 1
     }
 
-    // libayatana-appindicator3 quirk: it will not export its StatusNotifierItem
-    // on D-Bus until a `GtkMenu` is attached, even if the menu is empty. The
-    // tracer is "icon only" by spec, so we attach a deliberately empty menu;
-    // the real menu lands in issue #13. Without this, the indicator silently
-    // fails to register with `org.kde.StatusNotifierWatcher` and no SNI host
-    // (Quickshell, Plasma, GNOME-AppIndicator-extension, …) renders the icon.
-    // `gtk_menu_new` returns a `GtkWidget *`; the indicator wants `GtkMenu *`.
-    // In C that's the `GTK_MENU()` cast macro. From Swift the equivalent is to
-    // rebind the opaque pointer to the menu type — safe because GtkMenu is a
-    // subclass of GtkWidget and gtk_menu_new always returns a GtkMenu instance.
+    // The indicator owns its menu. `gtk_menu_new` returns a `GtkWidget *`;
+    // `app_indicator_set_menu` wants `GtkMenu *`. In C that's the `GTK_MENU()`
+    // cast macro. From Swift we rebind the typed pointer — safe because
+    // `gtk_menu_new` always returns a `GtkMenu` instance.
     guard let menuWidget = gtk_menu_new() else {
         let message = "RepoBarGtk: gtk_menu_new returned NULL\n"
         message.withCString { FileHandle.standardError.write(Data(bytes: $0, count: strlen($0))) }
@@ -81,6 +77,15 @@ func main() -> Int32 {
     }
     let menu = UnsafeMutableRawPointer(menuWidget).assumingMemoryBound(to: GtkMenu.self)
     app_indicator_set_menu(indicator, menu)
+
+    // Populate the menu from the static placeholder snapshot. We deliberately
+    // call `rebuildMenu` three times here so the manual leak check from #13
+    // exercises the destroy-and-rebuild path before any user interaction.
+    // GTK widgets removed via `gtk_widget_destroy` are finalized synchronously
+    // by GObject; an unbounded leak would show up immediately.
+    rebuildMenu(menu, snapshot: .staticPlaceholder)
+    rebuildMenu(menu, snapshot: .staticPlaceholder)
+    rebuildMenu(menu, snapshot: .staticPlaceholder)
 
     app_indicator_set_status(indicator, APP_INDICATOR_STATUS_ACTIVE)
     app_indicator_set_title(indicator, "RepoBar")

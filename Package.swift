@@ -37,5 +37,13 @@ let package = Package(
             dependencies: ["CAyatanaAppIndicator", "CGtk3"],
             path: "Sources/RepoBarGtk"
         ),
+        .testTarget(
+            name: "RepoBarGtkTests",
+            dependencies: ["RepoBarGtk"],
+            path: "Tests/RepoBarGtkTests",
+            swiftSettings: [
+                .enableExperimentalFeature("SwiftTesting"),
+            ]
+        ),
     ]
 )
