@@ -29,11 +29,17 @@ Add a SwiftPM `systemLibrary` target (`CAyatanaAppIndicator`, `pkgConfig: "ayata
 
 We do **not** ship a private vendored copy of the library — the system package is the dependency. README and `PKGBUILD` / `debian/control` list `libayatana-appindicator` (Arch) and `libayatana-appindicator3-1` (Ubuntu LTS) as runtime + build deps.
 
+**Important runtime fact: `libayatana-appindicator3` is built against GTK3, not GTK4.** Its `pkg-config --libs` pulls in `-lgtk-3 -lgdk-3 -lgobject-2.0 -lglib-2.0`, and internally it calls `gtk_icon_theme_get_for_screen` during indicator construction. Concretely this means:
+
+- We add a second `systemLibrary` target (`CGtk3`, `pkgConfig: "gtk+-3.0"`) and call `gtk_init_check` at process start. Without it the indicator emits `GDK_IS_SCREEN` criticals and never publishes its SNI item on the bus.
+- The eventual menu code uses GTK4 / libadwaita (via Adwaita-for-Swift). GTK3 and GTK4 coexist in one process — they live in different soname namespaces — but the indicator's `set_menu` call expects a `GtkMenu *` from GTK3. We will either keep the indicator's menu code as a small GTK3 island that translates `MenuSnapshot` rows into `GtkMenuItem`s, or replace `set_menu` with `set_menu_model` against a `GMenuModel` built from `RepoBarCore` (no GTK3-side widgets, but loses libdbusmenu's icons-per-row).
+- If at some point we migrate to `libayatana-appindicator-glib` (a GLib-only variant the library itself nudges us towards in deprecation warnings), the GTK3 dep drops out entirely. Not in scope for the tracer; revisit when the menu code stabilizes.
+
 ## Consequences
 
 - **Works on every relevant shell**: DankMaterialShell, KDE Plasma, waybar, GNOME with the AppIndicator extension, XFCE's plugin — they are all SNI hosts and pick up the indicator without per-shell code.
-- **Build cost**: one new `systemLibrary` target and a `pkg-config` lookup. The Swift wrapper is small; no Objective-C bridging.
-- **Runtime dep on `libayatana-appindicator3-1`**. Already pulled in by Discord/Dropbox/many Electron apps on a typical desktop; not exotic. Documented in install instructions and packaging files.
+- **Build cost**: two new `systemLibrary` targets (`CAyatanaAppIndicator` + `CGtk3`) and two `pkg-config` lookups. The Swift wrapper is small; no Objective-C bridging.
+- **Runtime dep on `libayatana-appindicator3-1` and `libgtk-3-0`**. Both are already pulled in by Discord/Dropbox/many Electron apps on a typical desktop; not exotic. Documented in install instructions and packaging files. `libgtk-3-0` is unfortunate alongside GTK4, but per the Decision section the indicator library forces it; the alternative is migrating to `libayatana-appindicator-glib`, which is left for a future ADR.
 - **GNOME quirk**: vanilla GNOME has no SNI host; the user must install the AppIndicator extension. Documented next to the install steps so users on stock GNOME aren't surprised when the icon doesn't appear.
 - **Future Wayland-native protocol**: if/when wlroots or a freedesktop spec lands a native tray, swapping the indicator-publisher behind RepoBar's UI module is a small change because `RepoBarCore` owns the `MenuSnapshot` and the GTK side already isolates the indicator behind one file.
 - **Rejected B-adjacent**: KDE's older `KStatusNotifierItem` C++ class is not a viable surface from Swift; libayatana-appindicator3 sits at the right level (GLib/GObject, easy to wrap).
