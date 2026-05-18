@@ -6,6 +6,12 @@ let package = Package(
     products: [
         .executable(name: "RepoBarGtk", targets: ["RepoBarGtk"]),
     ],
+    dependencies: [
+        // The fork lives at ./repobar as a git submodule pinned to the `linux`
+        // branch (.gitmodules). Using a local path dep lets us consume the
+        // Swift package without publishing it.
+        .package(path: "repobar"),
+    ],
     targets: [
         // libayatana-appindicator3 — the StatusNotifierItem publisher used by
         // Discord, Dropbox, et al. (See docs/adr/0001-tray-strategy.md.) The
@@ -34,12 +40,19 @@ let package = Package(
         ),
         .executableTarget(
             name: "RepoBarGtk",
-            dependencies: ["CAyatanaAppIndicator", "CGtk3"],
+            dependencies: [
+                "CAyatanaAppIndicator",
+                "CGtk3",
+                .product(name: "RepoBarCore", package: "repobar"),
+            ],
             path: "Sources/RepoBarGtk"
         ),
         .testTarget(
             name: "RepoBarGtkTests",
-            dependencies: ["RepoBarGtk"],
+            dependencies: [
+                "RepoBarGtk",
+                .product(name: "RepoBarCore", package: "repobar"),
+            ],
             path: "Tests/RepoBarGtkTests",
             swiftSettings: [
                 .enableExperimentalFeature("SwiftTesting"),

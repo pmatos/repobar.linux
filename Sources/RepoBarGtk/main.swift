@@ -80,17 +80,24 @@ func main() -> Int32 {
     let menu = UnsafeMutableRawPointer(menuWidget).assumingMemoryBound(to: GtkMenu.self)
     app_indicator_set_menu(indicator, menu)
 
-    // Populate the menu from the static placeholder snapshot. We deliberately
-    // call `rebuildMenu` three times here so the manual leak check from #13
-    // exercises the destroy-and-rebuild path before any user interaction.
-    // GTK widgets removed via `gtk_widget_destroy` are finalized synchronously
-    // by GObject; an unbounded leak would show up immediately.
-    rebuildMenu(menu, snapshot: .staticPlaceholder)
-    rebuildMenu(menu, snapshot: .staticPlaceholder)
-    rebuildMenu(menu, snapshot: .staticPlaceholder)
+    // Initial render: show "Loading repositories…" until the controller's
+    // first fetch lands a real snapshot via the inbox. We still rebuild
+    // twice up front so the destroy-and-rebuild leak path from #13 gets
+    // exercised before any user interaction; GTK widgets removed via
+    // `gtk_widget_destroy` are finalized synchronously by GObject and an
+    // unbounded leak would show up immediately.
+    rebuildMenu(menu, snapshot: .loading)
+    rebuildMenu(menu, snapshot: .loading)
 
     app_indicator_set_status(indicator, APP_INDICATOR_STATUS_ACTIVE)
     app_indicator_set_title(indicator, "RepoBar")
+
+    // Bridge: an inbox lets the async fetch Task push snapshots back to
+    // the main loop, and a 250 ms timeout source drains it.
+    let inbox = SnapshotInbox()
+    installMainLoopSnapshotPoller(menu: menu, inbox: inbox)
+    let controller = RepoListController(inbox: inbox)
+    Task.detached { await controller.refresh() }
 
     // SIGINT (Ctrl-C) and SIGTERM (systemctl --user stop) walk us to a clean
     // exit. SIGPIPE we ignore.
