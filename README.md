@@ -1,5 +1,8 @@
 # RepoBar for Linux
 
+[![Linux build (this repo)](https://github.com/pmatos/repobar.linux/actions/workflows/linux-build.yml/badge.svg?branch=main)](https://github.com/pmatos/repobar.linux/actions/workflows/linux-build.yml)
+[![Linux build (fork)](https://github.com/pmatos/repobar/actions/workflows/linux-build.yml/badge.svg?branch=linux)](https://github.com/pmatos/repobar/actions/workflows/linux-build.yml)
+
 A Linux port of [steipete/RepoBar](https://github.com/steipete/RepoBar) — a system-tray app that surfaces GitHub repositories, issues, pull requests, releases, CI state, and local checkout status in a single menu.
 
 **Status: bootstrapping.** Not yet usable. See the [issue tracker](https://github.com/pmatos/repobar.linux/issues) for the planned phases of work.
