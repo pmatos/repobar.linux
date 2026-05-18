@@ -26,9 +26,16 @@ public struct MenuSnapshot: Equatable, Sendable {
 }
 
 extension MenuSnapshot {
-    public enum Row: Equatable, Sendable {
+    public indirect enum Row: Equatable, Sendable {
         case item(label: String, enabled: Bool, action: Action?)
         case separator
+        /// A row that opens into a nested popup. The submenu items are full
+        /// `Row` values themselves, so `.submenu` can recursively contain
+        /// `.submenu`. We don't currently have a use for deeper than one
+        /// level of nesting — repo rows fan out into issues / PRs / releases
+        /// sections and those sections are flat — but the recursion makes the
+        /// model uniform and keeps the GTK rebuilder simple.
+        case submenu(label: String, rows: [Row])
     }
 
     /// A user-visible action that a menu row can trigger. Cases are
@@ -141,5 +148,127 @@ extension MenuSnapshot {
             return repo.fullName
         }
         return "\(repo.fullName) — \(issues)i \(pulls)p"
+    }
+}
+
+/// Per-repo bundle of the data a tray submenu needs. Built by
+/// `RepoListController`'s phase-2 fetch and consumed by
+/// `MenuSnapshot.fromRepositoryDetails(_:host:cap:)`.
+public struct RepoMenuData: Equatable, Sendable {
+    public let repo: Repository
+    public let issues: [RepoIssueSummary]
+    public let pulls: [RepoPullRequestSummary]
+    public let releases: [RepoReleaseSummary]
+
+    public init(
+        repo: Repository,
+        issues: [RepoIssueSummary] = [],
+        pulls: [RepoPullRequestSummary] = [],
+        releases: [RepoReleaseSummary] = []
+    ) {
+        self.repo = repo
+        self.issues = issues
+        self.pulls = pulls
+        self.releases = releases
+    }
+}
+
+extension MenuSnapshot {
+    /// Build a snapshot from a `RepoMenuData` list. Each repo becomes a
+    /// `.submenu` whose children are:
+    ///
+    ///     Open in browser
+    ///     ─────────────
+    ///     Issues               (disabled header)
+    ///       #N <title>         (.openURL action) — or "(no recent issues)"
+    ///     ─────────────
+    ///     Pull Requests
+    ///       #N <title> (draft) — or "(no recent pull requests)"
+    ///     ─────────────
+    ///     Releases
+    ///       <tag> — <name> (prerelease) — or "(no recent releases)"
+    ///
+    /// Section bodies are capped to `sectionCap` (default 8) so tall submenus
+    /// don't dwarf the screen.
+    public static func fromRepositoryDetails(
+        _ items: [RepoMenuData],
+        host: URL = URL(string: "https://github.com")!,
+        cap: Int = 50,
+        sectionCap: Int = 8
+    ) -> MenuSnapshot {
+        var rows: [Row] = []
+        if items.isEmpty {
+            rows.append(.item(label: "No repositories", enabled: false, action: nil))
+        } else {
+            let visible = items.prefix(cap)
+            for item in visible {
+                rows.append(self.buildRepoSubmenu(item, host: host, sectionCap: sectionCap))
+            }
+            if items.count > cap {
+                rows.append(.item(
+                    label: "… and \(items.count - cap) more",
+                    enabled: false,
+                    action: nil
+                ))
+            }
+        }
+        rows.append(.separator)
+        rows.append(.item(label: "Preferences…", enabled: false, action: nil))
+        rows.append(.item(label: "Quit RepoBar", enabled: true, action: .quit))
+        return MenuSnapshot(rows: rows)
+    }
+
+    static func buildRepoSubmenu(
+        _ data: RepoMenuData,
+        host: URL,
+        sectionCap: Int
+    ) -> Row {
+        let repoURL = host.appending(path: "\(data.repo.owner)/\(data.repo.name)")
+        var subRows: [Row] = [
+            .item(label: "Open in browser", enabled: true, action: .openURL(repoURL)),
+            .separator,
+        ]
+
+        subRows.append(.item(label: "Issues", enabled: false, action: nil))
+        if data.issues.isEmpty {
+            subRows.append(.item(label: "  (no recent issues)", enabled: false, action: nil))
+        } else {
+            for issue in data.issues.prefix(sectionCap) {
+                let label = "  #\(issue.number) \(self.truncated(issue.title, max: 60))"
+                subRows.append(.item(label: label, enabled: true, action: .openURL(issue.url)))
+            }
+        }
+        subRows.append(.separator)
+
+        subRows.append(.item(label: "Pull Requests", enabled: false, action: nil))
+        if data.pulls.isEmpty {
+            subRows.append(.item(label: "  (no recent pull requests)", enabled: false, action: nil))
+        } else {
+            for pr in data.pulls.prefix(sectionCap) {
+                let suffix = pr.isDraft ? " (draft)" : ""
+                let label = "  #\(pr.number) \(self.truncated(pr.title, max: 60))\(suffix)"
+                subRows.append(.item(label: label, enabled: true, action: .openURL(pr.url)))
+            }
+        }
+        subRows.append(.separator)
+
+        subRows.append(.item(label: "Releases", enabled: false, action: nil))
+        if data.releases.isEmpty {
+            subRows.append(.item(label: "  (no recent releases)", enabled: false, action: nil))
+        } else {
+            for rel in data.releases.prefix(sectionCap) {
+                let suffix = rel.isPrerelease ? " (prerelease)" : ""
+                let name = rel.name.isEmpty ? rel.tag : rel.name
+                let label = "  \(rel.tag) — \(self.truncated(name, max: 50))\(suffix)"
+                subRows.append(.item(label: label, enabled: true, action: .openURL(rel.url)))
+            }
+        }
+
+        return .submenu(label: self.repoRowLabel(data.repo), rows: subRows)
+    }
+
+    static func truncated(_ string: String, max: Int) -> String {
+        if string.count <= max { return string }
+        return String(string.prefix(max - 1)) + "…"
     }
 }

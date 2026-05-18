@@ -95,9 +95,54 @@ public actor RepoListController {
         do {
             let client = try await self.makeClient(for: source, settings: settings)
             let repos = try await client.repositoryList(limit: self.cap)
+            // Phase 1: flat list of clickable repo rows. Lands fast so the
+            // tray menu is usable while we go fetch the per-repo details.
             self.inbox.post(.fromRepositories(repos, host: webHost, cap: self.cap))
+
+            // Phase 2: per-repo recent issues / PRs / releases in parallel.
+            // Per-repo failures are swallowed — a single 404 or rate-limited
+            // repo shouldn't gut the rest of the snapshot.
+            let details = await Self.fetchAllDetails(repos: repos, client: client)
+            self.inbox.post(.fromRepositoryDetails(details, host: webHost, cap: self.cap))
         } catch {
             self.inbox.post(.error(self.displayMessage(for: error)))
+        }
+    }
+
+    /// Fetch recent issues / PRs / releases for every repo in parallel.
+    /// Results are returned in the same order as `repos`. Per-repo errors
+    /// degrade to empty lists; cache-first behavior in RepoBarCore keeps
+    /// the per-tick cost manageable.
+    static func fetchAllDetails(repos: [Repository], client: GitHubClient) async -> [RepoMenuData] {
+        await withTaskGroup(of: (Int, RepoMenuData).self) { group in
+            for (index, repo) in repos.enumerated() {
+                group.addTask {
+                    let owner = repo.owner
+                    let name = repo.name
+                    // The three endpoints are independent, so kick them off
+                    // concurrently via `async let`; the constructor then
+                    // awaits them in any order (they finish independently).
+                    async let issues: [RepoIssueSummary] =
+                        (try? await client.recentIssues(owner: owner, name: name, limit: 8)) ?? []
+                    async let pulls: [RepoPullRequestSummary] =
+                        (try? await client.recentPullRequests(owner: owner, name: name, limit: 8)) ?? []
+                    async let releases: [RepoReleaseSummary] =
+                        (try? await client.recentReleases(owner: owner, name: name, limit: 8)) ?? []
+                    let data = RepoMenuData(
+                        repo: repo,
+                        issues: await issues,
+                        pulls: await pulls,
+                        releases: await releases
+                    )
+                    return (index, data)
+                }
+            }
+            var collected: [(Int, RepoMenuData)] = []
+            for await item in group {
+                collected.append(item)
+            }
+            collected.sort { $0.0 < $1.0 }
+            return collected.map { $0.1 }
         }
     }
 

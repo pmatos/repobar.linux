@@ -29,35 +29,60 @@ func rebuildMenu(
 ) {
     let container = UnsafeMutableRawPointer(menu).assumingMemoryBound(to: GtkContainer.self)
 
-    // 1. Destroy existing children. `gtk_container_foreach` walks the live
-    //    children list; `gtk_widget_destroy` removes each from the container
-    //    and drops the implicit container reference, finalizing the widget
-    //    and firing any attached `destroyBoxedAction` notifies so we don't
-    //    leak boxes from the previous snapshot.
+    // Destroy existing children. `gtk_container_foreach` walks the live
+    // children list; `gtk_widget_destroy` removes each from the container
+    // and drops the implicit container reference, finalizing the widget
+    // (and any submenus it parents — GTK recurses) and firing any attached
+    // `destroyBoxedAction` notifies so we don't leak boxes from the
+    // previous snapshot.
     gtk_container_foreach(container, { widget, _ in
         if let widget {
             gtk_widget_destroy(widget)
         }
     }, nil)
 
-    // 2. Build fresh children from the snapshot.
+    populateMenu(menu, rows: snapshot.rows, opener: opener)
+}
+
+/// Build the widgets for `rows` and append them to `menu`.
+///
+/// `populateMenu` is also called recursively to populate freshly-allocated
+/// submenus inside `.submenu` rows.
+private func populateMenu(
+    _ menu: UnsafeMutablePointer<GtkMenu>,
+    rows: [MenuSnapshot.Row],
+    opener: URLOpener
+) {
     let shell = UnsafeMutableRawPointer(menu).assumingMemoryBound(to: GtkMenuShell.self)
-    for row in snapshot.rows {
-        let child: UnsafeMutablePointer<GtkWidget>
-        switch row {
-        case .separator:
-            guard let sep = gtk_separator_menu_item_new() else { continue }
-            child = sep
-        case let .item(label, enabled, action):
-            guard let item = gtk_menu_item_new_with_label(label) else { continue }
-            gtk_widget_set_sensitive(item, enabled ? gboolean(1) : gboolean(0))
-            if let action {
-                attachActivate(item, action: action, opener: opener)
-            }
-            child = item
-        }
+    for row in rows {
+        guard let child = buildRow(row, opener: opener) else { continue }
         gtk_menu_shell_append(shell, child)
         gtk_widget_show(child)
+    }
+}
+
+private func buildRow(
+    _ row: MenuSnapshot.Row,
+    opener: URLOpener
+) -> UnsafeMutablePointer<GtkWidget>? {
+    switch row {
+    case .separator:
+        return gtk_separator_menu_item_new()
+    case let .item(label, enabled, action):
+        guard let item = gtk_menu_item_new_with_label(label) else { return nil }
+        gtk_widget_set_sensitive(item, enabled ? gboolean(1) : gboolean(0))
+        if let action {
+            attachActivate(item, action: action, opener: opener)
+        }
+        return item
+    case let .submenu(label, rows):
+        guard let item = gtk_menu_item_new_with_label(label) else { return nil }
+        guard let subMenuWidget = gtk_menu_new() else { return item }
+        let subMenu = UnsafeMutableRawPointer(subMenuWidget).assumingMemoryBound(to: GtkMenu.self)
+        populateMenu(subMenu, rows: rows, opener: opener)
+        let menuItem = UnsafeMutableRawPointer(item).assumingMemoryBound(to: GtkMenuItem.self)
+        gtk_menu_item_set_submenu(menuItem, subMenuWidget)
+        return item
     }
 }
 
