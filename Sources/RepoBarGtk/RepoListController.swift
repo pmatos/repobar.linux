@@ -90,17 +90,18 @@ public actor RepoListController {
             self.inbox.post(.signedOut)
             return
         }
+        let settings = SettingsStore().load()
+        let webHost = settings.enterpriseHost ?? settings.githubHost
         do {
-            let client = try await self.makeClient(for: source)
+            let client = try await self.makeClient(for: source, settings: settings)
             let repos = try await client.repositoryList(limit: self.cap)
-            self.inbox.post(.fromRepositories(repos, cap: self.cap))
+            self.inbox.post(.fromRepositories(repos, host: webHost, cap: self.cap))
         } catch {
             self.inbox.post(.error(self.displayMessage(for: error)))
         }
     }
 
-    private func makeClient(for source: TrayAuthSource) async throws -> GitHubClient {
-        let settings = SettingsStore().load()
+    private func makeClient(for source: TrayAuthSource, settings: UserSettings) async throws -> GitHubClient {
         let host = settings.enterpriseHost ?? settings.githubHost
         let apiHost: URL = if let enterprise = settings.enterpriseHost {
             enterprise.appending(path: "/api/v3")

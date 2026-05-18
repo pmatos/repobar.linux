@@ -1,3 +1,4 @@
+import Foundation
 import RepoBarCore
 
 /// Declarative description of the tray popup menu, decoupled from GTK.
@@ -30,11 +31,13 @@ extension MenuSnapshot {
         case separator
     }
 
-    /// A user-visible action that a menu row can trigger. Each new case lands
-    /// alongside a `@convention(c)` trampoline in `MenuBuilder.swift` so that
-    /// the GTK rebuilder can wire it into `g_signal_connect_data`.
+    /// A user-visible action that a menu row can trigger. Cases are
+    /// interpreted by `dispatchMenuAction(_:opener:)`; the GTK rebuilder
+    /// wraps each into a boxed closure and wires it into
+    /// `g_signal_connect_data` with a `destroy_notify` that releases the box.
     public enum Action: Equatable, Sendable {
         case quit
+        case openURL(URL)
     }
 }
 
@@ -91,12 +94,17 @@ extension MenuSnapshot {
     /// - Rows show `owner/name — Ni Np` where `Ni` is open-issue count and
     ///   `Np` is open-PR count. Counts are suppressed when both are zero so
     ///   quiet repos don't visually shout.
+    /// - Rows are enabled and carry an `.openURL` action pointing at
+    ///   `host/owner/name`. The action is dispatched through the URLOpener
+    ///   (`xdg-open` on real installs). Per-repo submenus (issues, PRs,
+    ///   releases) follow in #22.
     /// - The list is truncated to `cap` (default 50, matching the issue spec).
-    ///   A trailing disabled row reports the trim when it happens, so the
-    ///   user sees that more exist behind the cap.
-    /// - Rows are not yet clickable; that's #21 (xdg-open) and #22 (submenus).
+    ///   A trailing disabled row reports the trim when it happens.
+    /// - `host` is normally `https://github.com`; enterprise installs feed in
+    ///   their own host from `UserSettings.githubHost`.
     public static func fromRepositories(
         _ repos: [Repository],
+        host: URL = URL(string: "https://github.com")!,
         cap: Int = 50
     ) -> MenuSnapshot {
         var rows: [Row] = []
@@ -105,7 +113,12 @@ extension MenuSnapshot {
         } else {
             let visible = repos.prefix(cap)
             for repo in visible {
-                rows.append(.item(label: repoRowLabel(repo), enabled: false, action: nil))
+                let url = host.appending(path: "\(repo.owner)/\(repo.name)")
+                rows.append(.item(
+                    label: repoRowLabel(repo),
+                    enabled: true,
+                    action: .openURL(url)
+                ))
             }
             if repos.count > cap {
                 rows.append(.item(

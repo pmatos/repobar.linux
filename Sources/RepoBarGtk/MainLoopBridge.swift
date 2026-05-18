@@ -10,13 +10,17 @@ import Foundation
 
 private nonisolated(unsafe) var snapshotInbox: SnapshotInbox?
 private nonisolated(unsafe) var snapshotMenu: UnsafeMutablePointer<GtkMenu>?
+private nonisolated(unsafe) var snapshotOpener: URLOpener?
 private nonisolated(unsafe) var lastRenderedSnapshot: MenuSnapshot?
 
 /// GSourceFunc trampoline. Returns `1` to stay registered.
 @_cdecl("repobar_snapshot_poll")
 func repobarSnapshotPoll(_ userData: UnsafeMutableRawPointer?) -> Int32 {
     _ = userData
-    guard let inbox = snapshotInbox, let menu = snapshotMenu else {
+    guard let inbox = snapshotInbox,
+          let menu = snapshotMenu,
+          let opener = snapshotOpener
+    else {
         return 1
     }
     guard let snapshot = inbox.consume() else {
@@ -25,24 +29,26 @@ func repobarSnapshotPoll(_ userData: UnsafeMutableRawPointer?) -> Int32 {
     if snapshot == lastRenderedSnapshot {
         return 1
     }
-    rebuildMenu(menu, snapshot: snapshot)
+    rebuildMenu(menu, snapshot: snapshot, opener: opener)
     lastRenderedSnapshot = snapshot
     return 1
 }
 
 /// Registers a 250 ms `g_timeout_add` source that drains `inbox` into
-/// `rebuildMenu(_:menu:)`. Call once, after the menu is constructed.
+/// `rebuildMenu(_:menu:opener:)`. Call once, after the menu is constructed.
 ///
 /// 250 ms is short enough that a click on the tray icon almost always sees
 /// the latest snapshot, and long enough that we don't burn CPU when the
 /// fetcher is idle. (`g_idle_add` would be lower latency but it's a
 /// busy-tick at lowest priority; `g_main_context_invoke` from the async
-/// task is the better answer eventually — see #X.)
+/// task is the better answer eventually.)
 func installMainLoopSnapshotPoller(
     menu: UnsafeMutablePointer<GtkMenu>,
-    inbox: SnapshotInbox
+    inbox: SnapshotInbox,
+    opener: URLOpener
 ) {
     snapshotMenu = menu
     snapshotInbox = inbox
+    snapshotOpener = opener
     _ = g_timeout_add(250, repobarSnapshotPoll, nil)
 }

@@ -1,4 +1,5 @@
 @testable import RepoBarGtk
+import Foundation
 import RepoBarCore
 import Testing
 
@@ -21,7 +22,9 @@ struct MenuSnapshotRepositoriesTests {
             stubRepo(owner: "pmatos", name: "repobar.linux", openIssues: 0, openPulls: 0),
         ])
         #expect(snapshot.rows.first == .item(
-            label: "pmatos/repobar.linux", enabled: false, action: nil
+            label: "pmatos/repobar.linux",
+            enabled: true,
+            action: .openURL(URL(string: "https://github.com/pmatos/repobar.linux")!)
         ))
     }
 
@@ -31,27 +34,23 @@ struct MenuSnapshotRepositoriesTests {
             stubRepo(owner: "octo", name: "hello-world", openIssues: 3, openPulls: 1),
         ])
         #expect(snapshot.rows.first == .item(
-            label: "octo/hello-world — 3i 1p", enabled: false, action: nil
+            label: "octo/hello-world — 3i 1p",
+            enabled: true,
+            action: .openURL(URL(string: "https://github.com/octo/hello-world")!)
         ))
     }
 
     @Test
-    func `repo rows are read-only at this stage — no actions`() {
-        let snapshot = MenuSnapshot.fromRepositories([
-            stubRepo(owner: "a", name: "b", openIssues: 0, openPulls: 0),
-        ])
-        // The acceptance criteria for #17 explicitly say clicks do nothing
-        // yet; #21 / #22 will wire actions in subsequent slices. Encoded as
-        // a test so a future change doesn't silently make the rows live
-        // without updating the model.
-        for row in snapshot.rows {
-            switch row {
-            case let .item(_, _, action):
-                #expect(action == nil || action == .quit)
-            case .separator:
-                continue
-            }
-        }
+    func `enterprise host appears in row openURL`() {
+        let snapshot = MenuSnapshot.fromRepositories(
+            [stubRepo(owner: "a", name: "b", openIssues: 0, openPulls: 0)],
+            host: URL(string: "https://github.example.com")!
+        )
+        #expect(snapshot.rows.first == .item(
+            label: "a/b",
+            enabled: true,
+            action: .openURL(URL(string: "https://github.example.com/a/b")!)
+        ))
     }
 
     @Test
