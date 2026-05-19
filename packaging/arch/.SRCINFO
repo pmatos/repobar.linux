@@ -1,0 +1,27 @@
+pkgbase = repobar-linux-git
+	pkgdesc = GitHub tray app for Linux — repositories, issues, pull requests, releases, CI
+	pkgver = r1.0000000
+	pkgrel = 1
+	url = https://github.com/pmatos/repobar.linux
+	arch = x86_64
+	license = MIT
+	makedepends = git
+	makedepends = pkgconf
+	depends = libayatana-appindicator
+	depends = gtk3
+	depends = glib2
+	depends = gdk-pixbuf2
+	depends = libnotify
+	depends = curl
+	depends = sqlite
+	depends = zlib
+	depends = gcc-libs
+	optdepends = xdg-utils: dispatches "open in browser" actions via xdg-open
+	provides = repobar
+	provides = repobar-linux
+	conflicts = repobar
+	conflicts = repobar-linux
+	source = git+https://github.com/pmatos/repobar.linux.git#branch=main
+	sha256sums = SKIP
+
+pkgname = repobar-linux-git

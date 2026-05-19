@@ -1,0 +1,93 @@
+# Maintainer: Paulo Matos <p@ocmatos.com>
+#
+# Arch Linux package for the Linux port of RepoBar.
+#
+# Builds both the `repobar` CLI (from the bundled submodule) and the
+# `RepoBarGtk` tray app, installs the .desktop entry, hicolor icons, and
+# the systemd user unit via the project's install-desktop.sh script.
+#
+# Swift requirement: this package depends on a Swift 6.2 toolchain being
+# discoverable at build time. The AUR `swift-bin` package is the
+# recommended source; alternatively, run `Scripts/install-toolchain.sh`
+# from the project root before `makepkg`, and ensure `swift` is on PATH
+# (e.g. `eval "$(./Scripts/install-toolchain.sh --print-env)"`). We don't
+# list `swift` in makedepends because pacman has no entry for it in the
+# official repos — namcap will warn, and that warning is deliberate.
+
+pkgname=repobar-linux-git
+pkgver=r1.0000000
+pkgrel=1
+pkgdesc="GitHub tray app for Linux — repositories, issues, pull requests, releases, CI"
+arch=('x86_64')
+url="https://github.com/pmatos/repobar.linux"
+license=('MIT')
+depends=(
+    'libayatana-appindicator'
+    'gtk3'
+    'glib2'
+    'gdk-pixbuf2'
+    'libnotify'
+    'curl'
+    'sqlite'
+    'zlib'
+    'gcc-libs'
+)
+makedepends=(
+    'git'
+    'pkgconf'
+)
+optdepends=(
+    'xdg-utils: dispatches "open in browser" actions via xdg-open'
+)
+provides=('repobar' 'repobar-linux')
+conflicts=('repobar' 'repobar-linux')
+source=("git+https://github.com/pmatos/repobar.linux.git#branch=main")
+sha256sums=('SKIP')
+
+pkgver() {
+    cd "$srcdir/repobar.linux"
+    printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+}
+
+prepare() {
+    cd "$srcdir/repobar.linux"
+    git submodule update --init --recursive
+}
+
+build() {
+    cd "$srcdir/repobar.linux"
+
+    if ! command -v swift >/dev/null 2>&1; then
+        printf 'PKGBUILD: swift is not on PATH. Install AUR swift-bin or run\n' >&2
+        printf '         Scripts/install-toolchain.sh and source its --print-env output.\n' >&2
+        exit 1
+    fi
+
+    # `--static-swift-stdlib` produces a binary that doesn't depend on the
+    # Swift runtime libs being present at /usr (which Arch does not ship
+    # in its official repos). The trade-off is a fatter binary, which is
+    # acceptable for a tray app shipped via a system package.
+    swift build -c release --static-swift-stdlib --product RepoBarGtk
+
+    # The CLI lives inside the pinned submodule.
+    swift build -c release --static-swift-stdlib \
+        --package-path repobar --product repobarcli
+}
+
+package() {
+    cd "$srcdir/repobar.linux"
+
+    install -Dm755 ".build/release/RepoBarGtk" "$pkgdir/usr/bin/RepoBarGtk"
+    install -Dm755 "repobar/.build/release/repobarcli" "$pkgdir/usr/bin/repobar"
+
+    # Desktop entry, hicolor icons, systemd user unit. `--no-cache-update`
+    # because pacman's post-install hooks own those caches.
+    ./Scripts/install-desktop.sh \
+        --prefix /usr \
+        --destdir "$pkgdir" \
+        --no-cache-update \
+        --quiet
+
+    install -Dm644 "repobar/LICENSE" \
+        "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
