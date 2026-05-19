@@ -10,7 +10,7 @@ struct MenuSnapshotSubmenuTests {
         let snapshot = MenuSnapshot.fromRepositoryDetails([
             RepoMenuData(repo: stubRepo(owner: "pmatos", name: "repobar.linux", openIssues: 0, openPulls: 0)),
         ])
-        guard case let .submenu(label, _) = snapshot.rows.first else {
+        guard case let .submenu(label, _, _) = snapshot.rows.first else {
             Issue.record("expected first row to be a submenu, got \(String(describing: snapshot.rows.first))")
             return
         }
@@ -22,7 +22,7 @@ struct MenuSnapshotSubmenuTests {
         let snapshot = MenuSnapshot.fromRepositoryDetails([
             RepoMenuData(repo: stubRepo(owner: "a", name: "b", openIssues: 0, openPulls: 0)),
         ])
-        guard case let .submenu(_, rows) = snapshot.rows.first else {
+        guard case let .submenu(_, rows, _) = snapshot.rows.first else {
             Issue.record("first row not a submenu")
             return
         }
@@ -38,12 +38,12 @@ struct MenuSnapshotSubmenuTests {
         let snapshot = MenuSnapshot.fromRepositoryDetails([
             RepoMenuData(repo: stubRepo(owner: "a", name: "b", openIssues: 0, openPulls: 0)),
         ])
-        guard case let .submenu(_, rows) = snapshot.rows.first else {
+        guard case let .submenu(_, rows, _) = snapshot.rows.first else {
             Issue.record("first row not a submenu")
             return
         }
         let labels = rows.compactMap { row -> String? in
-            if case let .item(label, _, _) = row { return label }
+            if case let .item(label, _, _, _) = row { return label }
             return nil
         }
         #expect(labels.contains("  (no recent issues)"))
@@ -70,12 +70,12 @@ struct MenuSnapshotSubmenuTests {
                 issues: [issue]
             ),
         ])
-        guard case let .submenu(_, rows) = snapshot.rows.first else {
+        guard case let .submenu(_, rows, _) = snapshot.rows.first else {
             Issue.record("first row not a submenu")
             return
         }
         let issueRows = rows.filter { row in
-            if case let .item(label, _, _) = row {
+            if case let .item(label, _, _, _) = row {
                 return label.contains("#42")
             }
             return false
@@ -110,15 +110,15 @@ struct MenuSnapshotSubmenuTests {
                 pulls: [pr]
             ),
         ])
-        guard case let .submenu(_, rows) = snapshot.rows.first else {
+        guard case let .submenu(_, rows, _) = snapshot.rows.first else {
             Issue.record("first row not a submenu")
             return
         }
         let prRow = rows.first(where: { row in
-            if case let .item(label, _, _) = row { return label.contains("#7") }
+            if case let .item(label, _, _, _) = row { return label.contains("#7") }
             return false
         })
-        guard case let .item(label, _, _) = prRow else {
+        guard case let .item(label, _, _, _) = prRow else {
             Issue.record("PR row missing")
             return
         }
@@ -145,15 +145,15 @@ struct MenuSnapshotSubmenuTests {
                 releases: [release]
             ),
         ])
-        guard case let .submenu(_, rows) = snapshot.rows.first else {
+        guard case let .submenu(_, rows, _) = snapshot.rows.first else {
             Issue.record("first row not a submenu")
             return
         }
         let relRow = rows.first(where: { row in
-            if case let .item(label, _, _) = row { return label.contains("v0.9-beta") }
+            if case let .item(label, _, _, _) = row { return label.contains("v0.9-beta") }
             return false
         })
-        guard case let .item(label, _, _) = relRow else {
+        guard case let .item(label, _, _, _) = relRow else {
             Issue.record("release row missing")
             return
         }
@@ -167,7 +167,7 @@ struct MenuSnapshotSubmenuTests {
         }
         let snapshot = MenuSnapshot.fromRepositoryDetails(repos, cap: 50)
         let labels = snapshot.rows.compactMap { row -> String? in
-            if case let .item(label, _, _) = row { return label }
+            if case let .item(label, _, _, _) = row { return label }
             return nil
         }
         #expect(labels.contains("… and 5 more"))
@@ -198,12 +198,12 @@ struct MenuSnapshotSubmenuTests {
             [RepoMenuData(repo: stubRepo(owner: "a", name: "b", openIssues: 1, openPulls: 0), issues: issues)],
             sectionCap: 5
         )
-        guard case let .submenu(_, rows) = snapshot.rows.first else {
+        guard case let .submenu(_, rows, _) = snapshot.rows.first else {
             Issue.record("first row not a submenu")
             return
         }
         let issueRows = rows.filter { row in
-            if case let .item(label, _, _) = row {
+            if case let .item(label, _, _, _) = row {
                 return label.contains("#") && label.contains("issue")
             }
             return false

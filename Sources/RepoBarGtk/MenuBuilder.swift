@@ -19,13 +19,17 @@ import Foundation
 
 /// Reconciles a `GtkMenu`'s children to match `snapshot`. Idempotent.
 ///
-/// `opener` is the `URLOpener` used by `.openURL` actions. Tests can pass a
-/// `RecordingURLOpener` here to assert what would have been opened; the real
-/// app passes a `SystemURLOpener`.
+/// `opener` is the `URLOpener` used by `.openURL` actions. `loader` is the
+/// avatar cache; we synchronously look up `cachedSync` for each row's
+/// `avatarURL` and only render an icon when warm — async fetches kick off
+/// elsewhere (in `RepoListController`) and the next rebuild picks them up.
+/// Tests can pass a `RecordingURLOpener` / `RecordingImageLoader` to assert
+/// what would have been opened / requested.
 func rebuildMenu(
     _ menu: UnsafeMutablePointer<GtkMenu>,
     snapshot: MenuSnapshot,
-    opener: URLOpener
+    opener: URLOpener,
+    loader: ImageLoader
 ) {
     let container = UnsafeMutableRawPointer(menu).assumingMemoryBound(to: GtkContainer.self)
 
@@ -41,7 +45,7 @@ func rebuildMenu(
         }
     }, nil)
 
-    populateMenu(menu, rows: snapshot.rows, opener: opener)
+    populateMenu(menu, rows: snapshot.rows, opener: opener, loader: loader)
 }
 
 /// Build the widgets for `rows` and append them to `menu`.
@@ -51,39 +55,71 @@ func rebuildMenu(
 private func populateMenu(
     _ menu: UnsafeMutablePointer<GtkMenu>,
     rows: [MenuSnapshot.Row],
-    opener: URLOpener
+    opener: URLOpener,
+    loader: ImageLoader
 ) {
     let shell = UnsafeMutableRawPointer(menu).assumingMemoryBound(to: GtkMenuShell.self)
     for row in rows {
-        guard let child = buildRow(row, opener: opener) else { continue }
+        guard let child = buildRow(row, opener: opener, loader: loader) else { continue }
         gtk_menu_shell_append(shell, child)
-        gtk_widget_show(child)
+        // `gtk_widget_show_all` recurses into any child box / image / label
+        // we added inside the menu item. `gtk_widget_show` alone would leave
+        // a custom-widget icon row blank.
+        gtk_widget_show_all(child)
     }
 }
 
 private func buildRow(
     _ row: MenuSnapshot.Row,
-    opener: URLOpener
+    opener: URLOpener,
+    loader: ImageLoader
 ) -> UnsafeMutablePointer<GtkWidget>? {
     switch row {
     case .separator:
         return gtk_separator_menu_item_new()
-    case let .item(label, enabled, action):
-        guard let item = gtk_menu_item_new_with_label(label) else { return nil }
+    case let .item(label, enabled, action, avatarURL):
+        guard let item = makeMenuItem(label: label, avatarURL: avatarURL, loader: loader) else { return nil }
         gtk_widget_set_sensitive(item, enabled ? gboolean(1) : gboolean(0))
         if let action {
             attachActivate(item, action: action, opener: opener)
         }
         return item
-    case let .submenu(label, rows):
-        guard let item = gtk_menu_item_new_with_label(label) else { return nil }
+    case let .submenu(label, rows, avatarURL):
+        guard let item = makeMenuItem(label: label, avatarURL: avatarURL, loader: loader) else { return nil }
         guard let subMenuWidget = gtk_menu_new() else { return item }
         let subMenu = UnsafeMutableRawPointer(subMenuWidget).assumingMemoryBound(to: GtkMenu.self)
-        populateMenu(subMenu, rows: rows, opener: opener)
+        populateMenu(subMenu, rows: rows, opener: opener, loader: loader)
         let menuItem = UnsafeMutableRawPointer(item).assumingMemoryBound(to: GtkMenuItem.self)
         gtk_menu_item_set_submenu(menuItem, subMenuWidget)
         return item
     }
+}
+
+/// Build either a plain text menu item or — if an avatar is available and
+/// cached — a custom-widget menu item with a 22×22 icon to the left of the
+/// label.
+private func makeMenuItem(
+    label: String,
+    avatarURL: URL?,
+    loader: ImageLoader
+) -> UnsafeMutablePointer<GtkWidget>? {
+    if let avatarURL,
+       let data = loader.cachedSync(avatarURL),
+       let pixbuf = decodePixbuf(data: data, targetSize: 22)
+    {
+        defer { g_object_unref(UnsafeMutableRawPointer(pixbuf)) }
+        guard let item = gtk_menu_item_new() else { return nil }
+        guard let box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6) else { return item }
+        guard let image = gtk_image_new_from_pixbuf(pixbuf) else { return item }
+        guard let labelWidget = gtk_label_new(label) else { return item }
+        let boxContainer = UnsafeMutableRawPointer(box).assumingMemoryBound(to: GtkContainer.self)
+        let itemContainer = UnsafeMutableRawPointer(item).assumingMemoryBound(to: GtkContainer.self)
+        gtk_container_add(boxContainer, image)
+        gtk_container_add(boxContainer, labelWidget)
+        gtk_container_add(itemContainer, box)
+        return item
+    }
+    return gtk_menu_item_new_with_label(label)
 }
 
 // MARK: - Action wiring

@@ -27,7 +27,7 @@ public struct MenuSnapshot: Equatable, Sendable {
 
 extension MenuSnapshot {
     public indirect enum Row: Equatable, Sendable {
-        case item(label: String, enabled: Bool, action: Action?)
+        case item(label: String, enabled: Bool, action: Action?, avatarURL: URL? = nil)
         case separator
         /// A row that opens into a nested popup. The submenu items are full
         /// `Row` values themselves, so `.submenu` can recursively contain
@@ -35,7 +35,7 @@ extension MenuSnapshot {
         /// level of nesting — repo rows fan out into issues / PRs / releases
         /// sections and those sections are flat — but the recursion makes the
         /// model uniform and keeps the GTK rebuilder simple.
-        case submenu(label: String, rows: [Row])
+        case submenu(label: String, rows: [Row], avatarURL: URL? = nil)
     }
 
     /// A user-visible action that a menu row can trigger. Cases are
@@ -124,7 +124,8 @@ extension MenuSnapshot {
                 rows.append(.item(
                     label: repoRowLabel(repo),
                     enabled: true,
-                    action: .openURL(url)
+                    action: .openURL(url),
+                    avatarURL: ownerAvatarURL(owner: repo.owner)
                 ))
             }
             if repos.count > cap {
@@ -148,6 +149,14 @@ extension MenuSnapshot {
             return repo.fullName
         }
         return "\(repo.fullName) — \(issues)i \(pulls)p"
+    }
+
+    /// GitHub's `https://github.com/<login>.png` endpoint returns the
+    /// public avatar PNG with a follow-on redirect to the CDN. The
+    /// `?size=N` hint asks for an N×N rendition, which keeps the cache
+    /// blob small. Works for both users and orgs.
+    static func ownerAvatarURL(owner: String, size: Int = 44) -> URL? {
+        URL(string: "https://github.com/\(owner).png?size=\(size)")
     }
 }
 
@@ -264,7 +273,11 @@ extension MenuSnapshot {
             }
         }
 
-        return .submenu(label: self.repoRowLabel(data.repo), rows: subRows)
+        return .submenu(
+            label: self.repoRowLabel(data.repo),
+            rows: subRows,
+            avatarURL: self.ownerAvatarURL(owner: data.repo.owner)
+        )
     }
 
     static func truncated(_ string: String, max: Int) -> String {

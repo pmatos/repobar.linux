@@ -87,8 +87,9 @@ func main() -> Int32 {
     // `gtk_widget_destroy` are finalized synchronously by GObject and an
     // unbounded leak would show up immediately.
     let opener: URLOpener = SystemURLOpener()
-    rebuildMenu(menu, snapshot: .loading, opener: opener)
-    rebuildMenu(menu, snapshot: .loading, opener: opener)
+    let loader: ImageLoader = DiskImageCache()
+    rebuildMenu(menu, snapshot: .loading, opener: opener, loader: loader)
+    rebuildMenu(menu, snapshot: .loading, opener: opener, loader: loader)
 
     app_indicator_set_status(indicator, APP_INDICATOR_STATUS_ACTIVE)
     app_indicator_set_title(indicator, "RepoBar")
@@ -96,8 +97,8 @@ func main() -> Int32 {
     // Bridge: an inbox lets the async fetch Task push snapshots back to
     // the main loop, and a 250 ms timeout source drains it.
     let inbox = SnapshotInbox()
-    installMainLoopSnapshotPoller(menu: menu, inbox: inbox, opener: opener)
-    let controller = RepoListController(inbox: inbox)
+    installMainLoopSnapshotPoller(menu: menu, inbox: inbox, opener: opener, loader: loader)
+    let controller = RepoListController(inbox: inbox, loader: loader)
     Task.detached { await controller.refresh() }
 
     // SIGINT (Ctrl-C) and SIGTERM (systemctl --user stop) walk us to a clean

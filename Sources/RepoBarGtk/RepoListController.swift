@@ -72,10 +72,12 @@ public func resolveTrayAuthSource(
 /// contract.
 public actor RepoListController {
     private let inbox: SnapshotInbox
+    private let loader: ImageLoader
     private let cap: Int
 
-    public init(inbox: SnapshotInbox, cap: Int = 50) {
+    public init(inbox: SnapshotInbox, loader: ImageLoader, cap: Int = 50) {
         self.inbox = inbox
+        self.loader = loader
         self.cap = cap
     }
 
@@ -99,6 +101,17 @@ public actor RepoListController {
             // tray menu is usable while we go fetch the per-repo details.
             self.inbox.post(.fromRepositories(repos, host: webHost, cap: self.cap))
 
+            // Avatar prefetch: pull owner avatars in parallel so the next
+            // rebuild can render them. The DiskImageCache dedupes and serves
+            // from disk on subsequent runs, so this is cheap once warm.
+            await Self.prefetchOwnerAvatars(repos: repos, loader: self.loader)
+            // Re-post the same flat snapshot to nudge the main-loop poller
+            // into re-rendering now that the avatars are cached. The
+            // snapshot-equality short-circuit in MainLoopBridge means we
+            // need a value-distinct snapshot to trigger; passing the same
+            // value is fine because the poller drops it.
+            self.inbox.post(.fromRepositories(repos, host: webHost, cap: self.cap))
+
             // Phase 2: per-repo recent issues / PRs / releases in parallel.
             // Per-repo failures are swallowed — a single 404 or rate-limited
             // repo shouldn't gut the rest of the snapshot.
@@ -106,6 +119,21 @@ public actor RepoListController {
             self.inbox.post(.fromRepositoryDetails(details, host: webHost, cap: self.cap))
         } catch {
             self.inbox.post(.error(self.displayMessage(for: error)))
+        }
+    }
+
+    /// Pull owner avatars in parallel from `https://github.com/<owner>.png`.
+    /// Errors are swallowed; a missing avatar just means the row renders
+    /// without an icon (the loader returns nil from `cachedSync`).
+    static func prefetchOwnerAvatars(repos: [Repository], loader: ImageLoader) async {
+        await withTaskGroup(of: Void.self) { group in
+            // Dedup by owner; the same org appears in many rows.
+            var seen = Set<String>()
+            for repo in repos where seen.insert(repo.owner).inserted {
+                guard let url = MenuSnapshot.ownerAvatarURL(owner: repo.owner) else { continue }
+                group.addTask { _ = try? await loader.load(url) }
+            }
+            for await _ in group {}
         }
     }
 

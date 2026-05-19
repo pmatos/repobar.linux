@@ -24,7 +24,8 @@ struct MenuSnapshotRepositoriesTests {
         #expect(snapshot.rows.first == .item(
             label: "pmatos/repobar.linux",
             enabled: true,
-            action: .openURL(URL(string: "https://github.com/pmatos/repobar.linux")!)
+            action: .openURL(URL(string: "https://github.com/pmatos/repobar.linux")!),
+            avatarURL: URL(string: "https://github.com/pmatos.png?size=44")
         ))
     }
 
@@ -36,7 +37,8 @@ struct MenuSnapshotRepositoriesTests {
         #expect(snapshot.rows.first == .item(
             label: "octo/hello-world — 3i 1p",
             enabled: true,
-            action: .openURL(URL(string: "https://github.com/octo/hello-world")!)
+            action: .openURL(URL(string: "https://github.com/octo/hello-world")!),
+            avatarURL: URL(string: "https://github.com/octo.png?size=44")
         ))
     }
 
@@ -49,7 +51,8 @@ struct MenuSnapshotRepositoriesTests {
         #expect(snapshot.rows.first == .item(
             label: "a/b",
             enabled: true,
-            action: .openURL(URL(string: "https://github.example.com/a/b")!)
+            action: .openURL(URL(string: "https://github.example.com/a/b")!),
+            avatarURL: URL(string: "https://github.com/a.png?size=44")
         ))
     }
 
@@ -78,7 +81,7 @@ struct MenuSnapshotRepositoriesTests {
         let snapshot = MenuSnapshot.fromRepositories(repos, cap: 50)
         // No "and N more" row should appear when count <= cap.
         for row in snapshot.rows {
-            if case let .item(label, _, _) = row {
+            if case let .item(label, _, _, _) = row {
                 #expect(label.contains("and") == false || label == "Quit RepoBar")
             }
         }
@@ -99,7 +102,7 @@ struct MenuSnapshotRepositoriesTests {
     func `signedOut placeholder mentions repobar login`() {
         let snapshot = MenuSnapshot.signedOut
         let labels = snapshot.rows.compactMap { row -> String? in
-            if case let .item(label, _, _) = row { return label }
+            if case let .item(label, _, _, _) = row { return label }
             return nil
         }
         #expect(labels.contains("Not signed in"))
@@ -110,7 +113,7 @@ struct MenuSnapshotRepositoriesTests {
     func `error snapshot exposes the message on its own row`() {
         let snapshot = MenuSnapshot.error("network unreachable")
         let labels = snapshot.rows.compactMap { row -> String? in
-            if case let .item(label, _, _) = row { return label }
+            if case let .item(label, _, _, _) = row { return label }
             return nil
         }
         #expect(labels.contains("network unreachable"))
