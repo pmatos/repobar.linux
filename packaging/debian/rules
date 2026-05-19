@@ -41,3 +41,10 @@ override_dh_auto_clean:
 # `strip --strip-debug` step would strip them but breaks Swift runtime
 # introspection. Keep them.
 override_dh_strip:
+
+# `dh_dwz` compresses DWARF debug info via the `dwz` tool, which only
+# understands DWARF 4. Swift's release builds emit DWARF 5 (`.debug_names`
+# section), so dh_dwz aborts with "Unknown debugging section .debug_names".
+# Skip it — the .deb is uncompressed-debug-info larger, but the binaries
+# stay valid for crash diagnostics.
+override_dh_dwz:
