@@ -111,11 +111,18 @@ jobs:
         if: ${{ matrix.container == '' }}
         run: Scripts/build-deb.sh --lintian
 
+      # `dpkg-buildpackage` drops the .deb in the parent of the source dir.
+      # `actions/upload-artifact@v4` refuses path patterns containing `..`,
+      # so move it into the workspace.
+      - name: Collect .deb into workspace (${{ matrix.leg }})
+        if: ${{ matrix.container == '' }}
+        run: mkdir -p dist && mv ../repobar_*.deb dist/
+
       - name: Upload .deb artifact (${{ matrix.leg }})
         if: ${{ matrix.container == '' }}
         uses: actions/upload-artifact@v4
         with:
           name: repobar-deb-${{ matrix.leg }}
-          path: ../repobar_*.deb
+          path: dist/repobar_*.deb
           if-no-files-found: error
           retention-days: 14
