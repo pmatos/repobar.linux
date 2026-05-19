@@ -45,6 +45,7 @@ jobs:
             binutils ca-certificates curl git gnupg libcurl4 libedit2 libncurses6 \
             libpython3-dev libsqlite3-0 libxml2 libz3-dev pkg-config tzdata unzip \
             zlib1g-dev libgtk-3-dev libayatana-appindicator3-dev \
+            libcurl4-openssl-dev \
             build-essential debhelper devscripts lintian fakeroot
           if grep -q '22.04' /etc/os-release; then
             sudo apt-get install -y --no-install-recommends libgcc-11-dev libstdc++-11-dev
