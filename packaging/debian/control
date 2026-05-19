@@ -1,0 +1,40 @@
+Source: repobar
+Section: x11
+Priority: optional
+Maintainer: Paulo Matos <p@ocmatos.com>
+Build-Depends: debhelper-compat (= 13),
+               git,
+               libayatana-appindicator3-dev,
+               libgtk-3-dev,
+               pkg-config
+Standards-Version: 4.6.2
+Homepage: https://github.com/pmatos/repobar.linux
+Vcs-Git: https://github.com/pmatos/repobar.linux.git
+Vcs-Browser: https://github.com/pmatos/repobar.linux
+Rules-Requires-Root: no
+
+Package: repobar
+Architecture: amd64
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+         libayatana-appindicator3-1,
+         libc6,
+         libcurl4,
+         libgdk-pixbuf-2.0-0 | libgdk-pixbuf2.0-0,
+         libglib2.0-0t64 | libglib2.0-0,
+         libgtk-3-0t64 | libgtk-3-0,
+         libnotify4,
+         libsqlite3-0,
+         libstdc++6,
+         zlib1g
+Recommends: xdg-utils
+Description: GitHub tray app for Linux
+ RepoBar is a system-tray app that surfaces GitHub repositories,
+ issues, pull requests, releases, and CI state in a single popup
+ menu. It ships with a CLI (`repobar`) that exposes the same data
+ surfaces for scripting and a GTK3 tray (`RepoBarGtk`) that
+ publishes a StatusNotifierItem via libayatana-appindicator3.
+ .
+ The .deb bundles a self-contained Swift runtime
+ (--static-swift-stdlib) so no Swift toolchain is required at
+ runtime — only standard GUI libraries from the base Ubuntu install.

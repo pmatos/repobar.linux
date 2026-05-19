@@ -1,0 +1,11 @@
+# Swift binaries embed the absolute source path in their reflection
+# metadata for runtime introspection. Stripping it would break crash
+# diagnostics. Accept the warning.
+repobar: file-references-package-build-path
+
+# Same root cause: Swift's debug-info section keeps the build path.
+repobar: unstripped-binary-or-object
+
+# We don't ship a manpage for `repobar` yet — the CLI's `--help` output
+# is the canonical reference until the docs slice (#34) lands one.
+repobar: no-manual-page

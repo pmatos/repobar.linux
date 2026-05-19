@@ -1,0 +1,9 @@
+repobar (0.0.0~git20260519) UNRELEASED; urgency=medium
+
+  * Initial Debian packaging. Builds with --static-swift-stdlib so the
+    .deb is self-contained for the Swift runtime; runtime dependencies
+    are limited to standard GUI libraries already on every Ubuntu LTS.
+  * Ships RepoBarGtk tray app, repobar CLI, .desktop entry, hicolor
+    icon set, and the systemd --user unit from packaging slice #19.
+
+ -- Paulo Matos <p@ocmatos.com>  Tue, 19 May 2026 12:00:00 +0100

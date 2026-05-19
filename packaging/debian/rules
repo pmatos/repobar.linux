@@ -1,0 +1,43 @@
+#!/usr/bin/make -f
+
+# Skip dh_auto_test (Swift tests need a working network for some suites
+# and the build environment doesn't have one). Skip dh_strip — Swift's
+# debug-info embeds source paths that we want preserved for crash
+# diagnostics; lintian's source-path warning is overridden.
+export DEB_BUILD_OPTIONS += nocheck
+
+%:
+	dh $@
+
+# No autotools / cmake to configure; skip the default.
+override_dh_auto_configure:
+
+# Build both products with --static-swift-stdlib so the resulting .deb
+# does not require a system-wide Swift runtime — Ubuntu has none.
+override_dh_auto_build:
+	swift build -c release --static-swift-stdlib --product RepoBarGtk
+	swift build -c release --static-swift-stdlib \
+		--package-path repobar --product repobarcli
+
+# Place artefacts under debian/repobar/, the standard staging dir for
+# the single binary package "repobar". The install-desktop.sh script
+# handles the desktop entry, hicolor icon set, and systemd user unit;
+# --no-cache-update because dpkg's post-install triggers own those.
+override_dh_auto_install:
+	install -Dm755 .build/release/RepoBarGtk \
+		debian/repobar/usr/bin/RepoBarGtk
+	install -Dm755 repobar/.build/release/repobarcli \
+		debian/repobar/usr/bin/repobar
+	./Scripts/install-desktop.sh \
+		--prefix /usr \
+		--destdir debian/repobar \
+		--no-cache-update \
+		--quiet
+
+override_dh_auto_clean:
+	rm -rf .build repobar/.build
+
+# Swift binaries embed source paths in their reflection metadata; the
+# `strip --strip-debug` step would strip them but breaks Swift runtime
+# introspection. Keep them.
+override_dh_strip:

@@ -44,7 +44,8 @@ jobs:
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             binutils ca-certificates curl git gnupg libcurl4 libedit2 libncurses6 \
             libpython3-dev libsqlite3-0 libxml2 libz3-dev pkg-config tzdata unzip \
-            zlib1g-dev libgtk-3-dev libayatana-appindicator3-dev
+            zlib1g-dev libgtk-3-dev libayatana-appindicator3-dev \
+            build-essential debhelper devscripts lintian fakeroot
           if grep -q '22.04' /etc/os-release; then
             sudo apt-get install -y --no-install-recommends libgcc-11-dev libstdc++-11-dev
           else
@@ -98,5 +99,22 @@ jobs:
         with:
           name: RepoBarGtk-debug-ubuntu-24.04
           path: .build/debug/RepoBarGtk
+          if-no-files-found: error
+          retention-days: 14
+
+      # Build the .deb on each ubuntu leg. Arch container is skipped — dpkg
+      # tooling isn't appropriate there. We use `-d` inside build-deb.sh
+      # because `swift` isn't an apt package, so the Build-Depends check
+      # would always fail.
+      - name: Build .deb (${{ matrix.leg }})
+        if: ${{ matrix.container == '' }}
+        run: Scripts/build-deb.sh --lintian
+
+      - name: Upload .deb artifact (${{ matrix.leg }})
+        if: ${{ matrix.container == '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: repobar-deb-${{ matrix.leg }}
+          path: ../repobar_*.deb
           if-no-files-found: error
           retention-days: 14
